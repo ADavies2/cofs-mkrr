@@ -121,16 +121,8 @@ for j in range(len(structures)):
 
 # Compute the Frobenius normed kernel for node, linker, and r-group
 K_node = node_avgs.dot(node_avgs.T)
-fro_norm_node = np.linalg.norm(K_node, 'fro')
-K_node_fro = K_node/fro_norm_node
-
 K_linker = linker_avgs.dot(linker_avgs.T)
-fro_norm_linker = np.linalg.norm(K_linker, 'fro')
-K_linker_fro = K_linker/fro_norm_linker
-
 K_r = r_avgs.dot(r_avgs.T)
-fro_norm_r = np.linalg.norm(K_r, 'fro')
-K_r_fro = K_r/fro_norm_r
 
 np.savetxt('soap-mkrr-node-kernel.csv', K_node_fro.T, delimiter=',')
 np.savetxt('soap-mkrr-linker-kernel.csv', K_linker_fro.T, delimiter=',')
