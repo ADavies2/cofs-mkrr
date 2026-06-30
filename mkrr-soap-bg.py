@@ -33,7 +33,8 @@ print(len(y))
 # Define hyperparameters
 test_size = 0.3
 seeds = [2873,317,3846,446,3555]
-deltas = [17.61977523,17.84865543,16.18454822]
+deltas = [22.20461977 20.65171198 19.45848805]
+xi = 3
 
 # Train the models for each seed
 results, models = {}, {}
@@ -41,15 +42,36 @@ for i in seeds:
     # Set-up the training-testing split
     splitter = ShuffleSplit(n_splits=1, test_size=test_size, random_state=i)
     train_indices, test_indices = next(splitter.split(y))
-
+    
     y_train = y[train_indices]
     y_test = y[test_indices]
-
+    
     refcodes_train = refcodes[train_indices]
     refcodes_test = refcodes[test_indices]
-
-    K_train = K_all[:, train_indices, :][:, :, train_indices]
-    K_test = K_all[:, test_indices, :][:, :, train_indices]
+    
+    K_ntrain = K_node[train_indices,:][:,train_indices]
+    K_ltrain = K_linker[train_indices,:][:,train_indices]
+    K_rtrain = K_fg[train_indices,:][:,train_indices]
+    
+    K_ntest = K_node[test_indices, :][:, train_indices]
+    K_ltest = K_linker[test_indices, :][:, train_indices]
+    K_rtest = K_fg[test_indices, :][:, train_indices]
+    
+    # Calculate the Frobenius norm of the training kernels
+    ntrain_fro = np.linalg.norm(K_ntrain, 'fro')
+    ltrain_fro = np.linalg.norm(K_ltrain, 'fro')
+    rtrain_fro = np.linalg.norm(K_rtrain, 'fro')
+    
+    # Normalize the train and test kernels by the train Frobenius
+    K_ntrain_norm = (K_ntrain/ntrain_fro)**xi
+    K_ltrain_norm = (K_ltrain/ltrain_fro)**xi
+    K_rtrain_norm = (K_rtrain/rtrain_fro)**xi
+    K_train = np.stack([K_ntrain_norm, K_ltrain_norm, K_rtrain_norm], axis=0)
+    
+    K_ntest_norm = (K_ntest/ntrain_fro)**xi
+    K_ltest_norm = (K_ltest/ltrain_fro)**xi
+    K_rtest_norm = (K_rtest/rtrain_fro)**xi
+    K_test = np.stack([K_ntest_norm, K_ltest_norm, K_rtest_norm], axis=0)
 
     # Fit and predict
     mkl = WeightedKernelRidge(alpha=1, deltas=deltas, kernels='precomputed', random_state=42)
@@ -130,10 +152,20 @@ for i in seeds:
 
     splitter = ShuffleSplit(n_splits=1, test_size=test_size, random_state=i)
     train_indices, test_indices = next(splitter.split(y))
-
-    K_ntrain = K_n[train_indices, :][:, train_indices]
-    K_ltrain = K_l[train_indices, :][:, train_indices]
-    K_rtrain = K_r[train_indices, :][:, train_indices]
+    
+    K_ntrain = K_node[train_indices,:][:,train_indices]
+    K_ltrain = K_linker[train_indices,:][:,train_indices]
+    K_rtrain = K_fg[train_indices,:][:,train_indices]
+    
+    # Calculate the train Frobenius norm
+    ntrain_fro = np.linalg.norm(K_ntrain, 'fro')
+    ltrain_fro = np.linalg.norm(K_ltrain, 'fro')
+    rtrain_fro = np.linalg.norm(K_rtrain, 'fro')
+    
+    # Normalize the train kernels by the train Frobenius
+    K_ntrain_norm = (K_ntrain/ntrain_fro)**xi
+    K_ltrain_norm = (K_ltrain/ltrain_fro)**xi
+    K_rtrain_norm = (K_rtrain/rtrain_fro)**xi
 
     node_delta = np.exp(models[i].deltas_[0])
     linker_delta = np.exp(models[i].deltas_[1])
@@ -143,9 +175,9 @@ for i in seeds:
     linker_coefs = models[i].dual_coef_
     r_coefs = models[i].dual_coef_
 
-    node_vals = (node_delta*K_ntrain).dot(node_coefs)
-    linker_vals = (linker_delta*K_ltrain).dot(linker_coefs)
-    r_vals = (r_delta*K_rtrain).dot(r_coefs)
+    node_vals = (node_delta*K_ntrain_norm).dot(node_coefs)
+    linker_vals = (linker_delta*K_ltrain_norm).dot(linker_coefs)
+    r_vals = (r_delta*K_rtrain_norm).dot(r_coefs)
 
     cof_contributions = {}
     index = 0
@@ -153,9 +185,6 @@ for i in seeds:
         cof_contributions[j] = {'cont,node': node_vals[index], 'cont,linker': linker_vals[index], 'cont,r': r_vals[index], 'bg,pred': train_pred[index]}
         index += 1
     contributions[i] = pd.DataFrame.from_dict(cof_contributions, orient='index')
-
-    #all = node_vals+linker_vals+r_vals
-    #print(np.allclose(all, train_pred))
 
 # Sort values by linker
 linker_ranks = {}
@@ -170,7 +199,21 @@ for i in seeds:
 
     df = pd.DataFrame.from_dict(avgs, orient='index')
     df['Rank'] = df['Mean'].rank(ascending=True).astype(int)
-    linker_ranks[i] = df.sort_values(by='Mean', ascending=True)
+    linker_ranks[i] = df.sort_values(by='Mean', ascending=False)
+
+    #print(df.sort_values(by='Mean', ascending=False))
+
+# Normalize the mean contribution of each linker within each seed
+for i in seeds:
+    seed_group = linker_ranks[i]
+    max_cont = max(seed_group['Mean'])
+    min_cont = min(seed_group['Mean'])
+
+    norm_means = []
+    for j in range(len(seed_group)):
+        norm_val = (seed_group.iloc[j]['Mean']-min_cont)/(max_cont-min_cont)
+        norm_means.append(norm_val)
+    linker_ranks[i]['Norm. Mean'] = norm_means
 
 # Sort values by r-group
 node_ranks, r_ranks = {}, {}
@@ -192,5 +235,15 @@ for i in seeds:
     r_df = pd.DataFrame.from_dict(r_avgs, orient='index')
     r_df['Rank'] = r_df['Mean'].rank(ascending=False).astype(int)
     r_ranks[i] = r_df.sort_values(by='Mean', ascending=True)
+    
+# Normalize the mean of each r-group within each seed
+for i in seeds:
+    seed_group = r_ranks[i]
+    max_cont = max(seed_group['Mean'])
+    min_cont = min(seed_group['Mean'])
 
-
+    norm_means = []
+    for j in range(len(seed_group)):
+        norm_val = (seed_group.iloc[j]['Mean']-min_cont)/(max_cont-min_cont)
+        norm_means.append(norm_val)
+    r_ranks[i]['Norm. Mean'] = norm_means
