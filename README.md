@@ -2,10 +2,10 @@
 
 ## Overview
 
-This repository contains Python scripts generated for the publication at this permanent DOI. The data associated with the scripts can be downloaded from the associated Zenodo dataset (DOI: 10.5281/zenodo.17916111). 
+This repository contains Python scripts generated for the publication at this permanent DOI. The data associated with the scripts can be downloaded from the associated Zenodo dataset (DOI: 10.5281/zenodo.21079537). 
 
 ## Updates
-06-30-2026 - The files mkrr-calculate-soap.py and mkrr-soap-bg.py were updated to reflect changes made. Specifically, normalizing the kernels by the Frobenius norm of the training data, and calculating the normalized mean contribution of each linker and r-group per seed as a means of interpreting the structure-property relationships. 
+06-30-2026 - The files mkrr-calculate-soap.py and mkrr-soap-bg.py were updated to reflect changes made. Specifically, normalizing the kernels by the Frobenius norm of the training data, and calculating the normalized mean contribution of each linker and r-group per seed as a means of interpreting the structure-property relationships. Updated the Zenodo DOI to reflect a new repository version.
 
 ## Citation
 
